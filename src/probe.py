@@ -5,7 +5,7 @@ from typing import Any, NamedTuple
 import joblib
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -20,6 +20,9 @@ class ProbeResult(NamedTuple):
     auc: float
     weight_norm: float
     pipeline: Pipeline
+    precision: float = 0.0
+    recall: float = 0.0
+    f1: float = 0.0
 
 
 class TurnExample(NamedTuple):
@@ -52,12 +55,16 @@ def _train_layer_probes(
         predictions = (probabilities >= 0.5).astype(int)
         accuracy = float(accuracy_score(labels, predictions))
         auc = float(roc_auc_score(labels, probabilities))
+        precision = float(precision_score(labels, predictions, zero_division=0))
+        recall = float(recall_score(labels, predictions, zero_division=0))
+        f1 = float(f1_score(labels, predictions, zero_division=0))
         pipeline.fit(features, labels)
         classifier = pipeline.named_steps["clf"]
         weight_norm = float(np.linalg.norm(classifier.coef_))
         probes[layer_idx] = ProbeResult(
             layer_idx=layer_idx, accuracy=accuracy, auc=auc,
             weight_norm=weight_norm, pipeline=pipeline,
+            precision=precision, recall=recall, f1=f1,
         )
         if layer_idx % 4 == 0:
             print(f"  Layer {layer_idx:02d} | accuracy={accuracy:.3f} auc={auc:.3f}")
@@ -140,8 +147,12 @@ def save_probes(
                 "accuracy": probe.accuracy,
                 "auc": probe.auc,
                 "weight_norm": probe.weight_norm,
+                "precision": probe.precision,
+                "recall": probe.recall,
+                "f1": probe.f1,
             }
         )
+        joblib.dump(probe.pipeline, out_dir / f"probe_layer_{layer_idx:02d}.pkl")
 
     curve.sort(key=lambda item: item["layer"])
     (out_dir / "probe_by_layer.json").write_text(json.dumps(curve, indent=2))
@@ -163,6 +174,13 @@ def load_peak_probe(probe_dir: Path = PROBE_DIR) -> tuple[int, Pipeline]:
     peak_layer = int(meta["peak_layer"])
     pipeline = joblib.load(probe_dir / "best_probe.pkl")
     return peak_layer, pipeline
+
+
+def load_probe_at_layer(layer_idx: int, probe_dir: Path = PROBE_DIR) -> Pipeline:
+    path = probe_dir / f"probe_layer_{layer_idx:02d}.pkl"
+    if not path.exists():
+        raise FileNotFoundError(f"No probe saved for layer {layer_idx}. Re-train the probe.")
+    return joblib.load(path)
 
 
 def load_probe_curve(probe_dir: Path = PROBE_DIR) -> list[dict[str, Any]]:

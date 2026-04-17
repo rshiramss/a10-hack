@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import json
 from functools import lru_cache
 from types import SimpleNamespace
 
 import numpy as np
 
 from .agent import SupportAgent
-from .db import get_or_create_db, get_rollout, list_rollouts, recent_probe_scores
+from .db import PROBE_DIR, get_or_create_db, get_rollout, list_rollouts, recent_probe_scores
 from .patch import ActivationPatcher, compute_steering_vector, find_false_positives
 from .probe import (
     ProbeScorer,
     TurnExample,
+    load_probe_at_layer,
     load_probe_curve,
     load_turn_metrics,
     probe_artifacts_exist,
@@ -59,7 +61,7 @@ def get_agent() -> SupportAgent:
     return SupportAgent(get_or_create_db())
 
 
-def generate_rollouts(n_rollouts: int, verbose: bool = False) -> dict:
+def generate_rollouts(n_rollouts: int, verbose: bool = False, archetype: str | None = None) -> dict:
     conn = get_or_create_db()
     agent = get_agent()
     scorer = None
@@ -67,7 +69,7 @@ def generate_rollouts(n_rollouts: int, verbose: bool = False) -> dict:
         scorer = ProbeScorer.from_disk()
     except FileNotFoundError:
         scorer = None
-    results = run_batch(agent, conn, n_rollouts=n_rollouts, verbose=verbose, scorer=scorer)
+    results = run_batch(agent, conn, n_rollouts=n_rollouts, verbose=verbose, scorer=scorer, archetype=archetype)
     resolved = sum(result.label for result in results)
     return {"total": len(results), "resolved": resolved, "escalated": len(results) - resolved}
 
@@ -220,6 +222,54 @@ def run_patch_for_rollout(rollout_id: int, alphas: list[float]) -> dict:
         "patched_probe_scores": patched.patched_probe_scores,
         "delta_by_alpha": patched.delta_by_alpha,
         "interesting": patched.interesting,
+    }
+
+
+def run_layer_patch(rollout_id: int, layer_idx: int, direction: str, alpha: float = 1.0) -> dict:
+    if not probe_artifacts_exist():
+        raise FileNotFoundError("Probe artifacts not available. Train the probe first.")
+    conn = get_or_create_db()
+    pipeline = load_probe_at_layer(layer_idx)
+    detail = get_rollout(conn, rollout_id)
+    if detail is None:
+        raise KeyError(f"Rollout {rollout_id} not found")
+
+    # Compute steering vector at this layer from all rollouts
+    rollouts = list_rollouts(conn, limit=10000)
+    results = [r for item in rollouts if (r := rollout_result_from_db(item)) is not None]
+    steering = compute_steering_vector(results, layer_idx)
+    if direction == "fp":
+        steering = -steering
+
+    agent_turns = [
+        t for t in detail["turns"]
+        if t["speaker"] == "agent" and t["hidden_states_path"]
+    ]
+    turn_scores = []
+    for turn in agent_turns:
+        matrix = np.load(turn["hidden_states_path"])
+        vector = matrix[layer_idx]
+        original_score = float(pipeline.predict_proba(vector.reshape(1, -1))[0, 1])
+        patched_vector = vector + alpha * steering
+        patched_score = float(pipeline.predict_proba(patched_vector.reshape(1, -1))[0, 1])
+        turn_scores.append({
+            "turn_index": turn["turn_index"],
+            "original_score": original_score,
+            "patched_score": patched_score,
+            "delta": patched_score - original_score,
+        })
+
+    meta = json.loads((PROBE_DIR / "meta.json").read_text())
+    original_mean = float(np.mean([t["original_score"] for t in turn_scores])) if turn_scores else None
+    patched_mean = float(np.mean([t["patched_score"] for t in turn_scores])) if turn_scores else None
+    return {
+        "rollout_id": rollout_id,
+        "layer_idx": layer_idx,
+        "direction": direction,
+        "alpha": alpha,
+        "peak_layer": meta["peak_layer"],
+        "turn_scores": turn_scores,
+        "summary": {"original_mean": original_mean, "patched_mean": patched_mean},
     }
 
 

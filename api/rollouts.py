@@ -21,5 +21,5 @@ def rollout_detail(rollout_id: int):
 
 @router.post("/generate")
 def generate(payload: GenerateRolloutsRequest):
-    return generate_rollouts(payload.n_rollouts, verbose=payload.verbose)
+    return generate_rollouts(payload.n_rollouts, verbose=payload.verbose, archetype=payload.archetype)
 

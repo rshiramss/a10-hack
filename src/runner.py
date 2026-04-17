@@ -158,6 +158,7 @@ def run_batch(
     verbose: bool = False,
     scorer: "ProbeScorer | None" = None,
     max_turns: int = MAX_TURNS,
+    archetype: str | None = None,
 ) -> list[RolloutResult]:
     results: list[RolloutResult] = []
     for idx in range(n_rollouts):
@@ -166,6 +167,7 @@ def run_batch(
             agent,
             db_conn,
             issue_type=issue,
+            archetype=archetype,
             verbose=verbose,
             scorer=scorer,
             max_turns=max_turns,
