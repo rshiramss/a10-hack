@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from .schemas import ScoreTurnRequest
-from src.service import get_probe_curve, get_probe_dashboard, score_live_turn, train_probe_from_db
+from src.service import get_probe_curve, get_probe_dashboard, get_turn_metrics, score_live_turn, train_probe_from_db
 
 router = APIRouter(prefix="/probe", tags=["probe"])
 
@@ -19,6 +19,11 @@ def score_turn(payload: ScoreTurnRequest):
 @router.get("/layer_curve")
 def layer_curve():
     return {"items": get_probe_curve()}
+
+
+@router.get("/turn_metrics")
+def turn_metrics():
+    return {"items": get_turn_metrics()}
 
 
 @router.get("/dashboard")

@@ -8,7 +8,16 @@ import numpy as np
 from .agent import SupportAgent
 from .db import get_or_create_db, get_rollout, list_rollouts, recent_probe_scores
 from .patch import ActivationPatcher, compute_steering_vector, find_false_positives
-from .probe import ProbeScorer, load_probe_curve, probe_artifacts_exist, save_probes, train_all_probes
+from .probe import (
+    ProbeScorer,
+    TurnExample,
+    load_probe_curve,
+    load_turn_metrics,
+    probe_artifacts_exist,
+    save_probes,
+    train_all_probes,
+    train_probes_from_turn_examples,
+)
 from .runner import RolloutResult, run_batch
 
 
@@ -63,15 +72,39 @@ def generate_rollouts(n_rollouts: int, verbose: bool = False) -> dict:
     return {"total": len(results), "resolved": resolved, "escalated": len(results) - resolved}
 
 
-def train_probe_from_db() -> dict:
+def _load_turn_examples_from_db() -> list[TurnExample]:
     conn = get_or_create_db()
     records = list_rollouts(conn, limit=10000)
-    results = [result for record in records if (result := rollout_result_from_db(record)) is not None]
-    if not results:
+    examples: list[TurnExample] = []
+    for record in records:
+        label = int(record.get("resolved") or 0)
+        detail = get_rollout(conn, record["id"])
+        if detail is None:
+            continue
+        for turn in detail["turns"]:
+            if turn["speaker"] != "agent" or not turn["hidden_states_path"]:
+                continue
+            try:
+                hidden_matrix = np.load(turn["hidden_states_path"])
+            except Exception:
+                continue
+            hidden_states = {idx: hidden_matrix[idx] for idx in range(hidden_matrix.shape[0])}
+            examples.append(TurnExample(
+                rollout_id=record["id"],
+                turn_index=turn["turn_index"],
+                hidden_states=hidden_states,
+                label=label,
+            ))
+    return examples
+
+
+def train_probe_from_db() -> dict:
+    examples = _load_turn_examples_from_db()
+    if not examples:
         raise RuntimeError("No rollout data available for probe training.")
-    probes, peak_layer = train_all_probes(results)
-    save_probes(probes, peak_layer)
-    return {"peak_layer": peak_layer, "n_layers": len(probes)}
+    probes, peak_layer, turn_metrics = train_probes_from_turn_examples(examples)
+    save_probes(probes, peak_layer, turn_metrics=turn_metrics)
+    return {"peak_layer": peak_layer, "n_layers": len(probes), "n_examples": len(examples)}
 
 
 def score_live_turn(conversation: list[dict]) -> dict:
@@ -105,6 +138,12 @@ def get_probe_curve() -> list[dict]:
     if not probe_artifacts_exist():
         return []
     return load_probe_curve()
+
+
+def get_turn_metrics() -> list[dict]:
+    if not probe_artifacts_exist():
+        return []
+    return load_turn_metrics()
 
 
 def get_probe_dashboard() -> dict:

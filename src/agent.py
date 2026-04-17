@@ -3,10 +3,13 @@ import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
 import os
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+if TYPE_CHECKING:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
 MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 ALT_MODEL_NAME = "Qwen/Qwen2.5-3B-Instruct"
@@ -49,16 +52,22 @@ class SupportAgent:
     def __init__(self, db_conn: sqlite3.Connection, model_name: str = MODEL_NAME):
         self.db_conn = db_conn
         self.model_name = os.getenv("MI_AGENT_MODEL", model_name)
-        self._tokenizer: AutoTokenizer | None = None
-        self._model: AutoModelForCausalLM | None = None
+        self._tokenizer: Any = None
+        self._model: Any = None
         self._capture_handles: list = []
         self._captured_hidden_states: dict[int, np.ndarray] = {}
-        self._device = "cuda" if torch.cuda.is_available() else "cpu"
-        self._dtype = torch.float16 if self._device == "cuda" else torch.float32
+        self._device: str | None = None
+        self._dtype: Any = None
 
     def _load(self):
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
         if self._model is not None:
             return
+        if self._device is None:
+            self._device = "cuda" if torch.cuda.is_available() else "cpu"
+            self._dtype = torch.float16 if self._device == "cuda" else torch.float32
         candidate_names = []
         for name in (self.model_name, ALT_MODEL_NAME):
             if name not in candidate_names:
@@ -101,7 +110,7 @@ class SupportAgent:
         self._load()
         return len(list(self._iter_layers()))
 
-    def _iter_layers(self) -> Iterator[torch.nn.Module]:
+    def _iter_layers(self) -> Iterator[Any]:
         if hasattr(self._model, "model") and hasattr(self._model.model, "layers"):
             return iter(self._model.model.layers)
         if hasattr(self._model, "transformer") and hasattr(self._model.transformer, "h"):
@@ -150,31 +159,37 @@ class SupportAgent:
             add_generation_prompt=include_generation_prompt,
         )
 
-    def _tokenize(self, text: str) -> dict[str, torch.Tensor]:
+    def _tokenize(self, text: str) -> dict[str, Any]:
         return self._tokenizer(text, return_tensors="pt").to(self._device)
 
-    @torch.no_grad()
     def _generate_text(self, prompt: str, max_new_tokens: int = 200) -> str:
-        inputs = self._tokenize(prompt)
-        output = self._model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            pad_token_id=self._tokenizer.eos_token_id,
-        )
-        new_ids = output[0][inputs["input_ids"].shape[1] :]
-        return self._tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+        import torch
 
-    @torch.no_grad()
+        with torch.no_grad():
+            inputs = self._tokenize(prompt)
+            output = self._model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                pad_token_id=self._tokenizer.eos_token_id,
+            )
+            new_ids = output[0][inputs["input_ids"].shape[1] :]
+            return self._tokenizer.decode(new_ids, skip_special_tokens=True).strip()
+
     def capture_hidden_states_for_text(self, full_text: str) -> dict[int, np.ndarray]:
+        import torch
+
         self._load()
         self._captured_hidden_states = {}
-        inputs = self._tokenize(full_text)
-        self._model(**inputs, use_cache=False)
+        with torch.no_grad():
+            inputs = self._tokenize(full_text)
+            self._model(**inputs, use_cache=False)
         return {idx: state.copy() for idx, state in self._captured_hidden_states.items()}
 
     @contextmanager
     def patch_layer(self, layer_idx: int, vector: np.ndarray, alpha: float = 1.0):
+        import torch
+
         self._load()
         patch = torch.tensor(vector, dtype=self._dtype, device=self._device) * alpha
         layers = list(self._iter_layers())
@@ -194,7 +209,6 @@ class SupportAgent:
         finally:
             handle.remove()
 
-    @torch.no_grad()
     def patched_hidden_states_for_text(
         self,
         full_text: str,

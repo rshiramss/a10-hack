@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,13 +6,82 @@
 
 :root {
   color-scheme: light;
+  --bg-deep: #020817;
+  --bg-mid: #08111f;
+  --line-soft: rgba(140, 243, 255, 0.14);
+  --card-edge: rgba(255, 255, 255, 0.1);
+}
+
+html {
+  background: var(--bg-deep);
 }
 
 body {
   margin: 0;
-  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-family: "Sora", "Space Grotesk", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(91, 108, 255, 0.26), transparent 26%),
+    radial-gradient(circle at 82% 12%, rgba(24, 231, 178, 0.18), transparent 24%),
+    radial-gradient(circle at 58% 82%, rgba(255, 122, 24, 0.12), transparent 22%),
+    linear-gradient(180deg, #08111f 0%, #020817 65%, #030712 100%);
+  color: #eef6ff;
 }
 
 * {
   box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(91, 108, 255, 0.35);
+  color: white;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(18px);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.mesh-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.mesh-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(140deg, rgba(255, 255, 255, 0.12), transparent 32%, rgba(91, 108, 255, 0.14)),
+    linear-gradient(90deg, transparent, rgba(140, 243, 255, 0.06), transparent);
+  pointer-events: none;
+}
+
+.grid-fade {
+  background-image:
+    linear-gradient(rgba(140, 243, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 243, 255, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at center, rgba(0, 0, 0, 1), transparent 88%);
+}
+
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(140, 243, 255, 0.12), transparent);
+  transform: translateX(-120%);
+  animation: sweep 6s linear infinite;
+  pointer-events: none;
 }

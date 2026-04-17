@@ -23,6 +23,7 @@ image = (
         "numpy>=1.26.0",
         "sentencepiece",
         "protobuf",
+        "fastapi[standard]>=0.115.0",
     )
     .add_local_dir("src", remote_path="/root/src")
 )

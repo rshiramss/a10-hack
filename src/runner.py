@@ -1,3 +1,4 @@
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -6,7 +7,7 @@ import numpy as np
 import sqlite3
 
 from .agent import SupportAgent
-from .customer import AngryCustomer, ISSUE_TYPES
+from .customer import ARCHETYPES, AngryCustomer, ISSUE_TYPES
 from .db import HIDDEN_STATES_DIR, create_rollout, finalize_rollout, insert_turn, sample_order_record
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ class RolloutResult:
     last_agent_hidden_states: dict[int, np.ndarray]
     last_probe_score: float | None
     last_agent_text: str | None
+    archetype: str | None = None
 
 
 def hidden_states_to_matrix(hidden_states: dict[int, np.ndarray]) -> np.ndarray:
@@ -49,12 +51,14 @@ def run_rollout(
     db_conn: sqlite3.Connection,
     *,
     issue_type: str | None = None,
+    archetype: str | None = None,
     verbose: bool = False,
     scorer: "ProbeScorer | None" = None,
     max_turns: int = MAX_TURNS,
 ) -> RolloutResult:
     order = sample_order_record(db_conn)
-    customer = AngryCustomer(order, issue_type=issue_type, max_turns=max_turns)
+    chosen_archetype = archetype or random.choice(ARCHETYPES)
+    customer = AngryCustomer(order, issue_type=issue_type, archetype=chosen_archetype, max_turns=max_turns)
     complaint = customer.get_opening_message()
     rollout_id = create_rollout(
         db_conn,
@@ -63,6 +67,7 @@ def run_rollout(
         customer_name=order["customer_name"],
         complaint_text=complaint,
         max_turns=max_turns,
+        archetype=chosen_archetype,
     )
 
     conversation: list[dict] = [{"role": "user", "content": complaint}]
@@ -80,7 +85,7 @@ def run_rollout(
     outcome = "escalated"
 
     if verbose:
-        print(f"\n[Rollout {rollout_id}] Issue={customer.issue_type} Order={order['id']}")
+        print(f"\n[Rollout {rollout_id}] Issue={customer.issue_type} Archetype={chosen_archetype} Order={order['id']}")
         print(f"  Customer: {complaint}")
 
     for turn_idx in range(1, max_turns + 1):
@@ -141,6 +146,7 @@ def run_rollout(
         last_agent_hidden_states=last_hidden_states,
         last_probe_score=last_probe_score,
         last_agent_text=last_agent_text,
+        archetype=chosen_archetype,
     )
 
 

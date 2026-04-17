@@ -83,16 +83,16 @@ export default function NodeGraph({
   ];
 
   return (
-    <section className="overflow-hidden rounded-[32px] border border-white/60 bg-white/75 shadow-panel backdrop-blur-xl">
-      <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-4">
+    <section className="mesh-panel overflow-hidden rounded-[36px] border border-white/10 bg-[rgba(7,14,28,0.78)] shadow-panel backdrop-blur-xl">
+      <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.3em] text-slate-500">Workflow</p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">Fixed node topology</h2>
+          <p className="font-mono text-xs uppercase tracking-[0.3em] text-signal">Workflow</p>
+          <h2 className="mt-1 text-xl font-semibold text-white">Fixed node topology</h2>
         </div>
         <select
           value={selectedRollout?.id ?? ""}
           onChange={(event) => onSelectRollout(Number(event.target.value))}
-          className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm"
+          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 shadow-sm outline-none backdrop-blur"
         >
           {rollouts.map((rollout) => (
             <option key={rollout.id} value={rollout.id}>
@@ -101,7 +101,8 @@ export default function NodeGraph({
           ))}
         </select>
       </div>
-      <div className="h-[620px] bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(219,234,254,0.7))]">
+      <div className="relative h-[620px] bg-[radial-gradient(circle_at_top,rgba(91,108,255,0.18),transparent_35%),linear-gradient(180deg,rgba(2,8,23,0.9),rgba(4,12,28,0.98))]">
+        <div className="grid-fade absolute inset-0 opacity-60" />
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -112,7 +113,7 @@ export default function NodeGraph({
           elementsSelectable
           onNodeClick={(_, node) => onSelectNode(node.id)}
         >
-          <Background color="#cbd5e1" gap={20} />
+          <Background color="rgba(140,243,255,0.12)" gap={28} />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
@@ -122,28 +123,28 @@ export default function NodeGraph({
 
 function WorkflowNode({ data }) {
   const tones = {
-    customer: "from-blue-500 to-cyan-500",
-    agent: "from-slate-900 to-slate-700",
-    verifier: "from-orange-500 to-amber-500",
+    customer: "from-slateblue to-signal",
+    agent: "from-plasma via-slateblue to-signal",
+    verifier: "from-ember to-amber-300",
   };
 
   return (
     <div
-      className={`w-[280px] rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-xl transition ${
-        data.selected ? "ring-2 ring-slate-900/80" : "ring-1 ring-slate-200/80"
+      className={`scanline w-[290px] rounded-[30px] border border-white/10 bg-[rgba(10,18,34,0.86)] p-5 shadow-glow transition ${
+        data.selected ? "ring-2 ring-signal/60" : "ring-1 ring-white/5"
       }`}
     >
-      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-slate-300" />
-      <div className={`inline-flex rounded-full bg-gradient-to-r ${tones[data.tone]} px-3 py-1 text-[10px] font-mono uppercase tracking-[0.25em] text-white`}>
+      <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-0 !bg-signal" />
+      <div className={`inline-flex rounded-full bg-gradient-to-r ${tones[data.tone]} px-3 py-1 text-[10px] font-mono uppercase tracking-[0.25em] text-white shadow-neon`}>
         {data.title}
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-slate-900">{data.subtitle}</h3>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{data.preview}</p>
-      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0 !bg-slate-400" />
+      <h3 className="mt-4 text-lg font-semibold text-white">{data.subtitle}</h3>
+      <p className="mt-3 text-sm leading-6 text-slate-300">{data.preview}</p>
+      <div className="mt-4 h-px w-full origin-left rounded-full bg-gradient-to-r from-signal/80 via-slateblue/60 to-transparent animate-pulseline" />
+      <Handle type="source" position={Position.Right} className="!h-3 !w-3 !border-0 !bg-signal" />
       {data.tone === "agent" ? (
-        <Handle type="source" position={Position.Bottom} className="!h-3 !w-3 !border-0 !bg-orange-400" />
+        <Handle type="source" position={Position.Bottom} className="!h-3 !w-3 !border-0 !bg-ember" />
       ) : null}
     </div>
   );
 }
-

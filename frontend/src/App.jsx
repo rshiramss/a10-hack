@@ -23,25 +23,29 @@ export default function App() {
     outcomes: { resolved: 0, escalated: 0 },
     live_feed: [],
     false_positives: [],
+    turn_metrics: [],
   });
 
   useEffect(() => {
     let mounted = true;
 
     async function load() {
-      const rolloutPayload = await getJson("/rollouts?limit=25");
-      const dashboardPayload = await getJson("/probe/dashboard").catch(() => ({
-        curve: [],
-        outcomes: { resolved: 0, escalated: 0 },
-        live_feed: [],
-        false_positives: [],
-        probe_ready: false,
-      }));
+      const [rolloutPayload, dashboardPayload, turnMetricsPayload] = await Promise.all([
+        getJson("/rollouts?limit=25"),
+        getJson("/probe/dashboard").catch(() => ({
+          curve: [],
+          outcomes: { resolved: 0, escalated: 0 },
+          live_feed: [],
+          false_positives: [],
+          probe_ready: false,
+        })),
+        getJson("/probe/turn_metrics").catch(() => ({ items: [] })),
+      ]);
       if (!mounted) {
         return;
       }
       setRollouts(rolloutPayload.items);
-      setDashboard(dashboardPayload);
+      setDashboard({ ...dashboardPayload, turn_metrics: turnMetricsPayload.items ?? [] });
       setSelectedRolloutId((current) => current ?? rolloutPayload.items[0]?.id ?? null);
     }
 
@@ -59,16 +63,24 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.92),_rgba(226,232,240,0.92)_40%,_rgba(191,219,254,0.85)_100%)] text-ink">
+    <div className="relative min-h-screen overflow-hidden text-mist">
+      <div className="orb left-[-120px] top-[80px] h-72 w-72 bg-slateblue/30" />
+      <div className="orb right-[6%] top-[12%] h-64 w-64 bg-mint/20" />
+      <div className="orb bottom-[10%] left-[42%] h-72 w-72 bg-ember/10" />
+      <div className="pointer-events-none absolute inset-0 bg-control-grid bg-[length:48px_48px] opacity-30" />
+
       <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-6 px-4 py-6 lg:px-8">
-        <header className="rounded-[32px] border border-white/60 bg-white/70 p-6 shadow-panel backdrop-blur-xl">
+        <header className="mesh-panel scanline rounded-[36px] border border-white/10 bg-[rgba(7,14,28,0.82)] p-6 shadow-panel backdrop-blur-xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <p className="font-mono text-xs uppercase tracking-[0.4em] text-slate-500">MI Agent Framework</p>
-              <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">
-                n8n-style support routing with live probe telemetry
+              <div className="inline-flex items-center gap-2 rounded-full border border-signal/20 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.38em] text-signal">
+                <span className="h-2 w-2 rounded-full bg-mint shadow-[0_0_16px_rgba(24,231,178,0.9)]" />
+                MI Agent Framework
+              </div>
+              <h1 className="mt-4 max-w-4xl text-4xl font-semibold leading-tight tracking-[-0.04em] text-white md:text-5xl">
+                Counterfactual support ops with a live mechanistic control room
               </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300">
                 Fixed workflow topology, synthetic rollout storage, probe-layer monitoring, and
                 counterfactual patch inspection in one local surface.
               </p>
@@ -82,13 +94,16 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <TabButton active={activeTab === "control"} onClick={() => setActiveTab("control")}>
             Control Room
           </TabButton>
           <TabButton active={activeTab === "monitor"} onClick={() => setActiveTab("monitor")}>
             Probe Monitor
           </TabButton>
+          <div className="ml-auto flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.25em] text-slate-300">
+            {dashboard.probe_ready ? "Probe Online" : "Probe Offline"}
+          </div>
         </div>
 
         {activeTab === "control" ? (
@@ -119,16 +134,16 @@ export default function App() {
 
 function MetricCard({ label, value, tone }) {
   const tones = {
-    mint: "from-teal-400/20 to-teal-500/10 text-teal-700",
-    ember: "from-orange-400/20 to-orange-500/10 text-orange-700",
-    slateblue: "from-blue-500/20 to-indigo-500/10 text-indigo-700",
-    ink: "from-slate-300/40 to-slate-400/10 text-slate-700",
+    mint: "from-mint/25 via-mint/10 to-transparent",
+    ember: "from-ember/25 via-ember/10 to-transparent",
+    slateblue: "from-slateblue/30 via-plasma/10 to-transparent",
+    ink: "from-white/12 via-white/5 to-transparent",
   };
 
   return (
-    <div className={`rounded-3xl border border-white/60 bg-gradient-to-br ${tones[tone]} p-4 shadow-sm`}>
-      <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+    <div className={`mesh-panel rounded-[28px] border border-white/10 bg-gradient-to-br ${tones[tone]} p-4 shadow-glow`}>
+      <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-slate-400">{label}</div>
+      <div className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-white">{value}</div>
     </div>
   );
 }
@@ -139,8 +154,8 @@ function TabButton({ active, onClick, children }) {
       onClick={onClick}
       className={`rounded-full px-4 py-2 text-sm font-medium transition ${
         active
-          ? "bg-slate-900 text-white shadow-lg"
-          : "border border-white/70 bg-white/70 text-slate-700 backdrop-blur"
+          ? "border border-signal/30 bg-white/10 text-white shadow-glow backdrop-blur"
+          : "border border-white/10 bg-white/5 text-slate-300 backdrop-blur hover:bg-white/10"
       }`}
     >
       {children}

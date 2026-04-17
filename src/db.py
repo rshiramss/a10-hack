@@ -105,6 +105,7 @@ def create_schema(conn: sqlite3.Connection):
             max_turns INTEGER NOT NULL,
             turns_completed INTEGER DEFAULT 0,
             final_probe_score REAL,
+            archetype TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -123,6 +124,12 @@ def create_schema(conn: sqlite3.Connection):
         """
     )
     conn.commit()
+    # Migration: add archetype column to existing databases
+    try:
+        conn.execute("ALTER TABLE rollouts ADD COLUMN archetype TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
 
 
 def seed_db(conn: sqlite3.Connection, n_customers: int = 50, n_orders: int = 200):
@@ -152,6 +159,20 @@ def seed_db(conn: sqlite3.Connection, n_customers: int = 50, n_orders: int = 200
         )
 
     conn.commit()
+
+
+def reset_rollouts(conn: sqlite3.Connection):
+    conn.executescript(
+        "DELETE FROM turns; DELETE FROM rollouts;"
+        "DELETE FROM sqlite_sequence WHERE name IN ('turns', 'rollouts');"
+    )
+    conn.commit()
+    # Reset hidden states and probe artifacts
+    import shutil
+    for d in (HIDDEN_STATES_DIR, PROBE_DIR, STEERING_DIR):
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir(parents=True, exist_ok=True)
 
 
 def get_or_create_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
@@ -206,16 +227,17 @@ def create_rollout(
     customer_name: str,
     complaint_text: str,
     max_turns: int,
+    archetype: str | None = None,
 ) -> int:
     now = _now_iso()
     cur = conn.execute(
         """
         INSERT INTO rollouts (
             issue_type, order_id, customer_name, complaint_text,
-            max_turns, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            max_turns, archetype, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (issue_type, order_id, customer_name, complaint_text, max_turns, now, now),
+        (issue_type, order_id, customer_name, complaint_text, max_turns, archetype, now, now),
     )
     conn.commit()
     return int(cur.lastrowid)
@@ -265,7 +287,7 @@ def list_rollouts(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
     rows = conn.execute(
         """
         SELECT id, issue_type, order_id, customer_name, complaint_text, outcome,
-               resolved, max_turns, turns_completed, final_probe_score, created_at, updated_at
+               resolved, max_turns, turns_completed, final_probe_score, archetype, created_at, updated_at
         FROM rollouts
         ORDER BY id DESC
         LIMIT ?
@@ -279,7 +301,7 @@ def get_rollout(conn: sqlite3.Connection, rollout_id: int) -> dict | None:
     rollout = conn.execute(
         """
         SELECT id, issue_type, order_id, customer_name, complaint_text, outcome,
-               resolved, max_turns, turns_completed, final_probe_score, created_at, updated_at
+               resolved, max_turns, turns_completed, final_probe_score, archetype, created_at, updated_at
         FROM rollouts
         WHERE id = ?
         """,
