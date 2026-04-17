@@ -1,0 +1,6 @@
+[
+  { "id": "P001", "name": "Wireless Headphones", "price": 89.99 },
+  { "id": "P003", "name": "Mechanical Keyboard", "price": 129.99 },
+  { "id": "P010", "name": "Noise Cancelling Earbuds", "price": 149.99 }
+]
+
