@@ -323,3 +323,91 @@ Task 2 is complete when:
 4. Outcomes are still decided by the existing keyword verifier, not the LLM.
 5. Rollouts remain stable enough that the probe trained on this data shows a visible difference between archetypes in the dashboard.
 
+## Task 3: Rebuild The Frontend As A Minimal Node-Framework UI (`frontend-lex/`)
+
+The current `frontend/` mixes too many panels into one view. We want a cleaner demo surface that looks like a small n8n-style builder, exposes exactly one flow (customer support agent → customer tester), and puts all interpretability behind a single right-hand control panel with a clear state machine.
+
+This is a parallel build in `frontend-lex/`. Do not modify `frontend/`.
+
+### Goal
+
+Give the demo a single surface where:
+
+- The canvas sells the "agent framework" framing.
+- Rollouts appear in a runs table.
+- Clicking a rollout opens a single-run console with per-turn probe scores.
+- Probe statistics are per-layer and include precision/recall/F1, not just accuracy/AUC.
+- Activation patching can be launched per-layer, and the patched view is a duplicate of the single-run console with `(original, patched)` probe scores side by side.
+
+### Canvas (Main View)
+
+- Pre-populated ReactFlow canvas. Two nodes and one edge, placed for the user.
+- **Agent Node** — labeled "Customer Support Agent." Clicking opens a cosmetic config drawer with fields for system prompt, MCP endpoint URL, MCP auth token, tool schema. All fields are theater: they persist to local state only and do not drive the backend. The real agent config is fixed.
+- **Tester Node** — labeled "Customer Tester." Clicking opens a real config drawer with archetype selector (`angry_never_satisfied` / `calm_but_firm`), rollout count input, and a **Run N Rollouts** button. This button is the one real wire on the canvas and hits the existing `/rollouts` generate endpoint.
+- Edge between the nodes is cosmetic.
+- No drag-and-drop palette, no add-node flow, no edge-drawing tool. Just a fixed two-node story.
+
+### Right-Hand Control Panel State Machine
+
+The control panel is the second half of the screen and cycles through four views. Each view can return to the previous one via ESC or an explicit back button.
+
+1. **Runs Table** (default)
+   - Rows = rollouts, newest first.
+   - Columns: id, archetype, issue type, outcome, final probe score, turn count.
+   - Framed as "parallel customers" cosmetically; rollouts still run sequentially in the backend.
+   - Click a row → Single Run view.
+
+2. **Single Run**
+   - Chat log for that rollout. Each agent turn shows its probe score as a colored bar.
+   - Header: `[Train Probe]` if no probe is saved, otherwise `[Open Probe Statistics]`.
+   - ESC → back to Runs Table.
+
+3. **Probe Statistics**
+   - Per-layer table. Rows = model layers.
+   - Columns: layer, accuracy, AUC, precision, recall, F1, `[Patch FN]`, `[Patch FP]`.
+   - `[Patch FN]` and `[Patch FP]` buttons patch the **currently-selected rollout** using the steering vector computed **at that layer**. FN vs FP chooses the direction of the vector (`mean_resolved - mean_escalated` vs inverse).
+   - One layer patched at a time. Clicking a patch button triggers the Patched Single Run view.
+   - ESC → back to Single Run.
+
+4. **Patched Single Run**
+   - Visually identical to the Single Run view, but each agent turn shows two probe scores: `(original, patched)`.
+   - Header shows which layer was patched and which direction (FN/FP).
+   - Small stats block at the top comparing probe accuracy/AUC on the patched rollout before vs after.
+   - ESC → back to Probe Statistics.
+
+### Backend Gaps To Fill
+
+The new frontend needs two things the existing API does not return yet.
+
+- **Per-layer precision/recall/F1.** `src/probe.py` currently persists only accuracy, AUC, and weight norm per layer in `probe_by_layer.json`. Extend the training pipeline to compute and store precision, recall, and F1 per layer as well. Expose them through `/probe/layer_curve` (or a new endpoint like `/probe/layer_stats`).
+- **Layer-parameterized patching with per-turn patched scores.** `src/service.py::run_patch_for_rollout` and `src/patch.py` currently patch at the peak layer only and report scores at the last agent turn. Extend to:
+  - Accept `layer_idx` and `direction` (`fn` / `fp`) parameters.
+  - Return patched probe scores for every agent turn in the rollout, so the Patched Single Run view can render a turn-by-turn trace.
+
+### Stack
+
+- React + Vite + Tailwind + XYFlow + Recharts. Same as `frontend/`.
+- New folder: `frontend-lex/`. Its own `package.json`, `vite.config.js`, `tailwind.config.js`.
+- Reads from the existing FastAPI backend at `VITE_API_URL`.
+
+### Non-Goals For Task 3
+
+- Touching anything in `frontend/`.
+- Drag-and-drop node palette, edge-drawing, or a second workflow.
+- Real MCP wiring. The MCP fields are pure theater.
+- Streaming mid-rollout text. The runs table updates on rollout completion via polling, like the existing frontend.
+- Persisting agent-node config changes to the backend. Agent config stays fixed.
+
+### Definition of Done
+
+Task 3 is complete when:
+
+1. `frontend-lex/` renders a two-node canvas with clickable Agent and Tester nodes.
+2. The Tester node's Run N Rollouts button triggers real rollout generation via the existing API.
+3. The Runs Table reflects new rollouts as they complete.
+4. Clicking a row opens the Single Run view with per-turn probe scores.
+5. The Probe Statistics view shows a per-layer table including precision, recall, and F1.
+6. `[Patch FN]` and `[Patch FP]` on any layer row patches the current rollout at that layer and opens the Patched Single Run view with `(original, patched)` probe scores per agent turn.
+7. ESC navigates back one level through the four views.
+8. The existing `frontend/` is untouched.
+
