@@ -146,6 +146,93 @@ class LLMEndpoint:
         }
 
     @modal.fastapi_endpoint(method="POST")
+    def ablate_and_generate(self, payload: dict) -> dict:
+        """
+        Single-shot generation with directional intervention on the residual
+        stream at every layer whose index >= from_layer.
+
+        Two modes (ref: Arditi et al., NeurIPS 2024):
+          - ablate (alpha=None):  x' = x - (x . r_hat) r_hat
+              Zero out the axis. Good when r encodes a *capability*.
+          - steer  (alpha given): x' = x - alpha * r_hat
+              Push activations away from the 'fired' cluster by a fixed
+              amount. Good when r is a *behavior marker* and you want to
+              nudge the verdict toward the 'resisted' cluster.
+              alpha>0 pushes toward resisted; alpha<0 pushes toward fired
+              (useful for a positive-control sanity check).
+
+        Request:
+            {
+                "system": str,
+                "user": str,
+                "direction": [d_model floats],
+                "from_layer": int,
+                "alpha": float (optional; if present -> steer, else ablate),
+                "max_new_tokens": int (optional, default 300)
+            }
+        """
+        import numpy as np
+        import torch
+
+        system_prompt = payload["system"]
+        user_prompt = payload["user"]
+        direction = np.asarray(payload["direction"], dtype=np.float32)
+        from_layer = int(payload.get("from_layer", 0))
+        max_new_tokens = int(payload.get("max_new_tokens", 300))
+        alpha_raw = payload.get("alpha")
+        alpha = float(alpha_raw) if alpha_raw is not None else None
+        mode = "steer" if alpha is not None else "ablate"
+
+        norm = float(np.linalg.norm(direction))
+        if norm < 1e-8:
+            raise ValueError("direction has zero norm")
+        r_hat_np = direction / norm
+
+        agent = self.agent
+        agent._load()
+        r_hat = torch.tensor(r_hat_np, dtype=agent._dtype, device=agent._device)
+        shift = (alpha * r_hat) if mode == "steer" else None
+
+        def make_hook():
+            if mode == "steer":
+                def hook(_module, _inputs, output):
+                    hidden = output[0] if isinstance(output, tuple) else output
+                    hidden.sub_(shift)
+                    return None
+                return hook
+            def hook(_module, _inputs, output):
+                hidden = output[0] if isinstance(output, tuple) else output
+                proj = (hidden * r_hat).sum(dim=-1, keepdim=True) * r_hat
+                hidden.sub_(proj)
+                return None
+            return hook
+
+        layers = list(agent._iter_layers())
+        handles = [layer.register_forward_hook(make_hook())
+                   for idx, layer in enumerate(layers) if idx >= from_layer]
+
+        try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+            prompt = agent._tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            raw = agent._generate_text(prompt, max_new_tokens=max_new_tokens)
+        finally:
+            for h in handles:
+                h.remove()
+
+        return {
+            "response": raw.strip(),
+            "prompt_text": prompt,
+            "from_layer": from_layer,
+            "mode": mode,
+            "alpha": alpha,
+        }
+
+    @modal.fastapi_endpoint(method="POST")
     def patch_hidden_states(self, payload: dict) -> dict:
         """
         Run a patched forward pass for counterfactual analysis.

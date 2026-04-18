@@ -1,0 +1,8 @@
+{
+  "peak_layer": 18,
+  "peak_auc": 1.0,
+  "direction_norm": 7.308473110198975,
+  "n_positives": 12,
+  "n_negatives": 84,
+  "n_layers": 28
+}
