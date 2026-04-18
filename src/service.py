@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from .agent import SupportAgent
-from .db import PROBE_DIR, get_or_create_db, get_rollout, list_rollouts, recent_probe_scores
+from .db import PROBE_DIR, get_or_create_db, get_rollout, list_rollouts, recent_probe_scores, update_turn_probe_score
 from .patch import ActivationPatcher, compute_steering_vector, find_false_positives
 from .probe import (
     ProbeScorer,
@@ -106,6 +106,15 @@ def train_probe_from_db() -> dict:
         raise RuntimeError("No rollout data available for probe training.")
     probes, peak_layer, turn_metrics = train_probes_from_turn_examples(examples)
     save_probes(probes, peak_layer, turn_metrics=turn_metrics)
+    # Backfill per-turn probe_score using peak-layer probe so per-rollout view has data.
+    conn = get_or_create_db()
+    peak_pipeline = probes[peak_layer].pipeline
+    for ex in examples:
+        vector = ex.hidden_states[peak_layer]
+        score = float(peak_pipeline.predict_proba(vector.reshape(1, -1))[0, 1])
+        update_turn_probe_score(
+            conn, rollout_id=ex.rollout_id, turn_index=ex.turn_index, probe_score=score,
+        )
     return {"peak_layer": peak_layer, "n_layers": len(probes), "n_examples": len(examples)}
 
 

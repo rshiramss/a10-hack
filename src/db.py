@@ -263,6 +263,20 @@ def insert_turn(
     conn.commit()
 
 
+def update_turn_probe_score(
+    conn: sqlite3.Connection,
+    *,
+    rollout_id: int,
+    turn_index: int,
+    probe_score: float,
+):
+    conn.execute(
+        "UPDATE turns SET probe_score = ? WHERE rollout_id = ? AND turn_index = ? AND speaker = 'agent'",
+        (probe_score, rollout_id, turn_index),
+    )
+    conn.commit()
+
+
 def finalize_rollout(
     conn: sqlite3.Connection,
     *,

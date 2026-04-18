@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-from src.db import get_or_create_db, reset_rollouts
+from src.db import get_or_create_db
 from src.agent import SupportAgent
 from src.runner import run_rollout
 from src.probe import train_all_probes, save_probes, ProbeScorer
@@ -21,7 +21,6 @@ from src.probe import train_all_probes, save_probes, ProbeScorer
 
 def demo_single_rollout():
     db_conn = get_or_create_db()
-    reset_rollouts(db_conn)
     agent = SupportAgent(db_conn)
 
     print("Running single rollout (verbose)...")
@@ -36,9 +35,6 @@ def demo_probe_training(n_rollouts: int = 20):
     from src.runner import run_batch
 
     db_conn = get_or_create_db()
-    print("Resetting previous rollouts...")
-    reset_rollouts(db_conn)
-
     agent = SupportAgent(db_conn)
 
     print(f"Collecting {n_rollouts} rollouts...")
@@ -59,14 +55,28 @@ def demo_probe_training(n_rollouts: int = 20):
     print(f"Probe score on last rollout (label={last.label}): {score:.3f}")
 
 
+def probe_only():
+    from src.db import list_rollouts as db_list_rollouts
+    from src.service import rollout_result_from_db
+
+    conn = get_or_create_db()
+    records = db_list_rollouts(conn, limit=10000)
+    results = [r for rec in records if (r := rollout_result_from_db(rec)) is not None]
+    print(f"Loaded {len(results)} rollouts from DB")
+    probes, peak_layer = train_all_probes(results)
+    save_probes(probes, peak_layer)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["single", "train"], default="single")
+    parser.add_argument("--mode", choices=["single", "train", "probe-only"], default="single")
     parser.add_argument("--n_rollouts", type=int, default=20)
     args = parser.parse_args()
 
     if args.mode == "single":
         demo_single_rollout()
+    elif args.mode == "probe-only":
+        probe_only()
     else:
         demo_probe_training(args.n_rollouts)

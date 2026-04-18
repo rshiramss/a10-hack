@@ -1,7 +1,7 @@
-export default function PatchedRun({ rollout, patchData, onBack }) {
+export default function PatchedRun({ rollout, patchData, onClose }) {
   const turns = rollout?.turns || []
   const patchMeta = patchData
-    ? { layer: patchData.layer_idx, direction: patchData.direction, alpha: patchData.alpha }
+    ? { layer: patchData.layer_idx, direction: patchData.direction, alpha: patchData.alpha, peakLayer: patchData.peak_layer }
     : null
 
   const scoreByTurn = {}
@@ -14,48 +14,63 @@ export default function PatchedRun({ rollout, patchData, onBack }) {
   const summary = patchData?.summary
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800">
-        <button onClick={onBack} className="text-slate-500 hover:text-slate-300 transition-colors">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-semibold text-slate-100">
-            Patched Run — Layer {patchMeta?.layer ?? '?'}
-            <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-normal ${
-              patchMeta?.direction === 'fn'
-                ? 'bg-emerald-900/40 text-emerald-300'
-                : 'bg-rose-900/40 text-rose-300'
-            }`}>
-              {patchMeta?.direction === 'fn' ? 'FN → push resolved' : 'FP → push escalated'}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">α = {patchMeta?.alpha} · Rollout #{rollout?.id}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-6">
+      <div className="flex flex-col h-full w-full max-w-[1100px] rounded-2xl border-2 border-violet-500/60 bg-slate-950 shadow-[0_0_80px_rgba(139,92,246,0.35)] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-violet-500/40 bg-gradient-to-r from-violet-900/40 via-slate-900/40 to-slate-900/40">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-violet-500/20 border border-violet-500/40 text-violet-200 text-xs font-bold tracking-widest uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+              Patched Run
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Rollout #{rollout?.id} · Layer {patchMeta?.layer ?? '?'}
+                {patchMeta?.peakLayer != null && patchMeta.layer === patchMeta.peakLayer && (
+                  <span className="ml-1.5 text-violet-400 text-xs">★ peak</span>
+                )}
+                <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-normal ${
+                  patchMeta?.direction === 'fn'
+                    ? 'bg-emerald-900/40 text-emerald-300'
+                    : 'bg-rose-900/40 text-rose-300'
+                }`}>
+                  {patchMeta?.direction === 'fn' ? 'FN → push resolved' : 'FP → push escalated'}
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                α = {patchMeta?.alpha} · steering = E[h | resolved] − E[h | escalated], applied at layer {patchMeta?.layer}, rescored via probe
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors border border-slate-700"
+            title="ESC"
+          >
+            Close
+          </button>
         </div>
-      </div>
 
-      {summary && (
-        <div className="flex gap-4 px-5 py-3 bg-slate-900/60 border-b border-slate-800">
-          <StatBlock label="Avg probe (original)" value={summary.original_mean} />
-          <div className="text-slate-600 self-center">→</div>
-          <StatBlock label="Avg probe (patched)" value={summary.patched_mean} highlight />
-          {summary.original_mean != null && summary.patched_mean != null && (
-            <StatBlock
-              label="Δ mean"
-              value={summary.patched_mean - summary.original_mean}
-              signed
-            />
-          )}
+        {summary && (
+          <div className="flex gap-6 px-6 py-4 bg-violet-950/20 border-b border-violet-500/20">
+            <StatBlock label="Avg probe (original)" value={summary.original_mean} />
+            <div className="text-violet-400 self-center text-lg">→</div>
+            <StatBlock label="Avg probe (patched)" value={summary.patched_mean} highlight />
+            {summary.original_mean != null && summary.patched_mean != null && (
+              <StatBlock
+                label="Δ mean"
+                value={summary.patched_mean - summary.original_mean}
+                signed
+              />
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
+          {turns.map((turn, i) => {
+            const scores = scoreByTurn[turn.turn_index]
+            return <PatchedTurnBubble key={i} turn={turn} scores={scores} />
+          })}
         </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-        {turns.map((turn, i) => {
-          const scores = scoreByTurn[turn.turn_index]
-          return <PatchedTurnBubble key={i} turn={turn} scores={scores} />
-        })}
       </div>
     </div>
   )
@@ -75,7 +90,7 @@ function StatBlock({ label, value, highlight, signed }) {
   return (
     <div>
       <div className="text-xs text-slate-500">{label}</div>
-      <div className={`text-sm font-semibold ${color}`}>{formatted}</div>
+      <div className={`text-lg font-semibold ${color}`}>{formatted}</div>
     </div>
   )
 }
@@ -96,17 +111,9 @@ function PatchedTurnBubble({ turn, scores }) {
       </div>
       {isAgent && scores && (
         <div className="flex items-center gap-4 px-1">
-          <ScorePair
-            label="orig"
-            value={scores.original_score}
-            color={probeColor(scores.original_score)}
-          />
-          <span className="text-slate-600 text-xs">→</span>
-          <ScorePair
-            label="patched"
-            value={scores.patched_score}
-            color={probeColor(scores.patched_score)}
-          />
+          <ScorePair label="orig" value={scores.original_score} color={probeColor(scores.original_score)} />
+          <span className="text-violet-400 text-xs">→</span>
+          <ScorePair label="patched" value={scores.patched_score} color={probeColor(scores.patched_score)} />
           {scores.delta != null && (
             <span className={`text-xs ${scores.delta > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {scores.delta >= 0 ? '+' : ''}{(scores.delta * 100).toFixed(1)}%

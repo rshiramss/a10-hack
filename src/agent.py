@@ -18,12 +18,21 @@ _MODAL_ENDPOINT = os.environ.get("MI_MODAL_ENDPOINT")
 _MODAL_PATCH_ENDPOINT = os.environ.get("MI_MODAL_PATCH_ENDPOINT")
 
 
-def _call_modal(endpoint: str, payload: dict) -> dict:
-    import urllib.request, json as _json
+def _call_modal(endpoint: str, payload: dict, max_retries: int = 6) -> dict:
+    import urllib.request, json as _json, time, urllib.error
     data = _json.dumps(payload).encode()
-    req = urllib.request.Request(endpoint, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return _json.loads(resp.read())
+    for attempt in range(max_retries):
+        req = urllib.request.Request(endpoint, data=data, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                return _json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                wait = 2 ** attempt
+                print(f"  [429] rate limited, retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                raise
 
 
 def _deserialize_hidden_states(raw: dict) -> dict[int, np.ndarray]:

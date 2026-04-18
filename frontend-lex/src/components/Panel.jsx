@@ -2,18 +2,18 @@ import { useEffect } from 'react'
 import RunsTable from './RunsTable.jsx'
 import SingleRun from './SingleRun.jsx'
 import ProbeStats from './ProbeStats.jsx'
-import PatchedRun from './PatchedRun.jsx'
 
 export default function Panel({
   view,
   rollouts,
   selectedRollout,
+  selectedRolloutId,
   layers,
   peakLayer,
-  patchData,
   probeReady,
   trainingProbe,
   onSelectRollout,
+  onOpenProbeStats,
   onBack,
   onTrainProbe,
   onPatch,
@@ -29,7 +29,14 @@ export default function Panel({
   return (
     <div className="w-[520px] flex-shrink-0 h-full border-l border-slate-800 bg-slate-950 flex flex-col">
       {view === 'runsTable' && (
-        <RunsTable rollouts={rollouts} onSelect={onSelectRollout} />
+        <RunsTable
+          rollouts={rollouts}
+          onSelect={onSelectRollout}
+          probeReady={probeReady}
+          onOpenProbeStats={onOpenProbeStats}
+          onTrainProbe={onTrainProbe}
+          trainingProbe={trainingProbe}
+        />
       )}
       {view === 'singleRun' && (
         <SingleRun
@@ -37,22 +44,17 @@ export default function Panel({
           probeReady={probeReady}
           onBack={onBack}
           onTrainProbe={onTrainProbe}
-          onOpenProbeStats={() => onSelectRollout(selectedRollout?.id, 'probeStats')}
+          onOpenPatch={() => onSelectRollout(selectedRollout?.id, 'probeStats')}
         />
       )}
-      {view === 'probeStats' && (
+      {(view === 'probeStats' || view === 'patchedRun') && (
         <ProbeStats
           layers={layers}
           peakLayer={peakLayer}
+          rolloutCount={rollouts.length}
           onBack={onBack}
           onPatch={onPatch}
-        />
-      )}
-      {view === 'patchedRun' && (
-        <PatchedRun
-          rollout={selectedRollout}
-          patchData={patchData}
-          onBack={onBack}
+          canPatch={Boolean(selectedRolloutId)}
         />
       )}
 

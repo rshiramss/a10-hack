@@ -10,6 +10,13 @@ htmlcov/
 .venv/
 venv/
 env/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Project-local Conda (if present)
+.conda/
 
 # Environment / secrets
 .env

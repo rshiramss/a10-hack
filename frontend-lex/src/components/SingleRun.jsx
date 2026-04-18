@@ -1,6 +1,5 @@
-export default function SingleRun({ rollout, probeReady, onBack, onTrainProbe, onOpenProbeStats }) {
+export default function SingleRun({ rollout, probeReady, onBack, onTrainProbe, onOpenPatch }) {
   const turns = rollout?.turns || []
-  const agentTurns = turns.filter(t => t.speaker === 'agent')
 
   return (
     <div className="flex flex-col h-full">
@@ -33,10 +32,11 @@ export default function SingleRun({ rollout, probeReady, onBack, onTrainProbe, o
         <div className="flex-shrink-0">
           {probeReady ? (
             <button
-              onClick={onOpenProbeStats}
+              onClick={onOpenPatch}
               className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors"
+              title="Open per-layer patch controls for this rollout"
             >
-              Probe Statistics →
+              Patch →
             </button>
           ) : (
             <button

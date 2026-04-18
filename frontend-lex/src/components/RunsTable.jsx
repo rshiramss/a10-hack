@@ -3,12 +3,7 @@ const OUTCOME_STYLE = {
   escalated: 'text-rose-400 bg-rose-400/10',
 }
 
-function fmt(val) {
-  if (val == null) return '—'
-  return (val * 100).toFixed(0) + '%'
-}
-
-export default function RunsTable({ rollouts, onSelect }) {
+export default function RunsTable({ rollouts, onSelect, probeReady, onOpenProbeStats, onTrainProbe, trainingProbe }) {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
@@ -16,9 +11,27 @@ export default function RunsTable({ rollouts, onSelect }) {
           <h2 className="text-sm font-semibold text-slate-100">Parallel Customers</h2>
           <p className="text-xs text-slate-500 mt-0.5">{rollouts.length} rollout{rollouts.length !== 1 ? 's' : ''} · click to inspect</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Pill label={rollouts.filter(r => r.outcome === 'resolved').length} color="emerald" text="resolved" />
           <Pill label={rollouts.filter(r => r.outcome === 'escalated').length} color="rose" text="escalated" />
+          {probeReady ? (
+            <button
+              onClick={onOpenProbeStats}
+              className="ml-1 px-2.5 py-1 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-colors"
+            >
+              Probe Stats
+            </button>
+          ) : (
+            onTrainProbe && (
+              <button
+                onClick={onTrainProbe}
+                disabled={trainingProbe}
+                className="ml-1 px-2.5 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {trainingProbe ? 'Training…' : 'Train Probe'}
+              </button>
+            )
+          )}
         </div>
       </div>
 
@@ -35,7 +48,6 @@ export default function RunsTable({ rollouts, onSelect }) {
                 <Th>Archetype</Th>
                 <Th>Issue</Th>
                 <Th>Outcome</Th>
-                <Th>Probe</Th>
                 <Th>Turns</Th>
               </tr>
             </thead>
@@ -64,9 +76,6 @@ export default function RunsTable({ rollouts, onSelect }) {
                       {r.outcome || '—'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <ProbeBar score={r.final_probe_score} />
-                  </td>
                   <td className="px-4 py-3 text-slate-400">{r.turns_completed}</td>
                 </tr>
               ))}
@@ -93,16 +102,3 @@ function Pill({ label, color, text }) {
   )
 }
 
-function ProbeBar({ score }) {
-  if (score == null) return <span className="text-slate-600">—</span>
-  const pct = Math.round(score * 100)
-  const color = score > 0.6 ? 'bg-emerald-500' : score > 0.4 ? 'bg-amber-500' : 'bg-rose-500'
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-slate-400 w-7 text-right">{pct}%</span>
-    </div>
-  )
-}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import NodeGraph from "./components/NodeGraph";
 import ProbeMonitor from "./components/ProbeMonitor";
 import SidePanel from "./components/SidePanel";
+import AgentBuilder from "./components/AgentBuilder";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -31,7 +32,7 @@ export default function App() {
 
     async function load() {
       const [rolloutPayload, dashboardPayload, turnMetricsPayload] = await Promise.all([
-        getJson("/rollouts?limit=25"),
+        getJson("/rollouts?limit=1000"),
         getJson("/probe/dashboard").catch(() => ({
           curve: [],
           outcomes: { resolved: 0, escalated: 0 },
@@ -101,12 +102,17 @@ export default function App() {
           <TabButton active={activeTab === "monitor"} onClick={() => setActiveTab("monitor")}>
             Probe Monitor
           </TabButton>
+          <TabButton active={activeTab === "builder"} onClick={() => setActiveTab("builder")}>
+            Agent Builder
+          </TabButton>
           <div className="ml-auto flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.25em] text-slate-300">
             {dashboard.probe_ready ? "Probe Online" : "Probe Offline"}
           </div>
         </div>
 
-        {activeTab === "control" ? (
+        {activeTab === "builder" ? (
+          <AgentBuilder />
+        ) : activeTab === "control" ? (
           <div className="grid flex-1 gap-6 xl:grid-cols-[minmax(0,1.3fr)_420px]">
             <NodeGraph
               rollouts={rollouts}
@@ -127,6 +133,7 @@ export default function App() {
         ) : (
           <ProbeMonitor dashboard={dashboard} />
         )}
+
       </div>
     </div>
   );

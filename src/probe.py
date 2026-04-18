@@ -6,7 +6,6 @@ import joblib
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
-from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -44,21 +43,18 @@ def _make_pipeline() -> Pipeline:
 def _train_layer_probes(
     features_by_layer: dict[int, np.ndarray],
     labels: np.ndarray,
-    splitter: StratifiedKFold,
 ) -> dict[int, ProbeResult]:
     probes: dict[int, ProbeResult] = {}
     for layer_idx, features in features_by_layer.items():
         pipeline = _make_pipeline()
-        probabilities = cross_val_predict(
-            pipeline, features, labels, cv=splitter, method="predict_proba",
-        )[:, 1]
+        pipeline.fit(features, labels)
+        probabilities = pipeline.predict_proba(features)[:, 1]
         predictions = (probabilities >= 0.5).astype(int)
         accuracy = float(accuracy_score(labels, predictions))
-        auc = float(roc_auc_score(labels, probabilities))
+        auc = float(roc_auc_score(labels, probabilities)) if len(set(labels.tolist())) > 1 else 0.5
         precision = float(precision_score(labels, predictions, zero_division=0))
         recall = float(recall_score(labels, predictions, zero_division=0))
         f1 = float(f1_score(labels, predictions, zero_division=0))
-        pipeline.fit(features, labels)
         classifier = pipeline.named_steps["clf"]
         weight_norm = float(np.linalg.norm(classifier.coef_))
         probes[layer_idx] = ProbeResult(
@@ -80,13 +76,12 @@ def train_probes_from_turn_examples(
 
     labels = np.array([ex.label for ex in examples])
     n_layers = len(examples[0].hidden_states)
-    splitter = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     features_by_layer = {
         layer_idx: np.array([ex.hidden_states[layer_idx] for ex in examples])
         for layer_idx in range(n_layers)
     }
-    probes = _train_layer_probes(features_by_layer, labels, splitter)
+    probes = _train_layer_probes(features_by_layer, labels)
 
     peak_layer = max(probes, key=lambda idx: probes[idx].auc)
     print(f"\nPeak layer: {peak_layer} (AUC={probes[peak_layer].auc:.3f})")
@@ -121,12 +116,11 @@ def train_all_probes(results: list[RolloutResult]) -> tuple[dict[int, ProbeResul
 
     labels = np.array([result.label for result in results])
     n_layers = len(results[0].last_agent_hidden_states)
-    splitter = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     features_by_layer = {
         layer_idx: np.array([result.last_agent_hidden_states[layer_idx] for result in results])
         for layer_idx in range(n_layers)
     }
-    probes = _train_layer_probes(features_by_layer, labels, splitter)
+    probes = _train_layer_probes(features_by_layer, labels)
     peak_layer = max(probes, key=lambda idx: probes[idx].auc)
     print(f"\nPeak layer: {peak_layer} (AUC={probes[peak_layer].auc:.3f})")
     return probes, peak_layer
@@ -180,7 +174,13 @@ def load_probe_at_layer(layer_idx: int, probe_dir: Path = PROBE_DIR) -> Pipeline
     path = probe_dir / f"probe_layer_{layer_idx:02d}.pkl"
     if not path.exists():
         raise FileNotFoundError(f"No probe saved for layer {layer_idx}. Re-train the probe.")
-    return joblib.load(path)
+    pipeline = joblib.load(path)
+    # sklearn cross-version compat: 1.8.0 dropped `multi_class` attr, 1.6.x predict_proba
+    # still reads it. Binary classification -> sigmoid branch regardless of value.
+    clf = pipeline[-1]
+    if not hasattr(clf, "multi_class"):
+        clf.multi_class = "auto"
+    return pipeline
 
 
 def load_probe_curve(probe_dir: Path = PROBE_DIR) -> list[dict[str, Any]]:

@@ -85,3 +85,55 @@ body {
   animation: sweep 6s linear infinite;
   pointer-events: none;
 }
+
+/* AgentBuilder node cards */
+.node-card {
+  width: 260px;
+  border-radius: 24px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(10,18,34,0.88);
+  padding: 18px;
+  box-shadow: 0 0 24px rgba(91,108,255,0.12);
+  transition: box-shadow 0.2s;
+}
+
+.node-badge {
+  display: inline-flex;
+  border-radius: 9999px;
+  padding: 2px 12px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: white;
+  box-shadow: 0 0 12px rgba(91,108,255,0.4);
+}
+
+.node-line {
+  margin-top: 14px;
+  height: 1px;
+  width: 100%;
+  border-radius: 9999px;
+  background: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.input-field {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #e2e8f0;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.input-field:focus {
+  border-color: rgba(91,108,255,0.5);
+}
+
+.input-field option {
+  background: #08111f;
+}

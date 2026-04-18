@@ -5,13 +5,24 @@ function pct(v) {
   return (v * 100).toFixed(1) + '%'
 }
 
-export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patching }) {
+export default function ProbeStats({
+  layers,
+  peakLayer,
+  rolloutCount,
+  onBack,
+  onPatch,
+  patching,
+  canPatch,
+}) {
   const [patchingLayer, setPatchingLayer] = useState(null)
 
   function handlePatch(layerIdx, direction) {
+    if (!onPatch) return
     setPatchingLayer(`${layerIdx}-${direction}`)
     onPatch(layerIdx, direction).finally(() => setPatchingLayer(null))
   }
+
+  const peak = layers.find(l => l.layer === peakLayer) ?? null
 
   return (
     <div className="flex flex-col h-full">
@@ -24,7 +35,7 @@ export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patchin
         <div>
           <h2 className="text-sm font-semibold text-slate-100">Probe Statistics</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Per-layer · peak layer {peakLayer ?? '—'} · {layers.length} layers
+            Global · over {rolloutCount ?? '—'} rollout{rolloutCount === 1 ? '' : 's'} · peak layer {peakLayer ?? '—'} · {layers.length} layers
           </p>
         </div>
       </div>
@@ -35,6 +46,24 @@ export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patchin
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
+          {peak && (
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-900/40">
+              <div className="text-xs uppercase tracking-wide text-slate-500 mb-3">
+                Peak layer {peak.layer} · global metrics
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                <MetricTile label="AUC" value={peak.auc} accent="violet" />
+                <MetricTile label="Accuracy" value={peak.accuracy} />
+                <MetricTile label="Precision" value={peak.precision} />
+                <MetricTile label="Recall" value={peak.recall} />
+                <MetricTile label="F1" value={peak.f1} />
+              </div>
+            </div>
+          )}
+
+          <div className="px-5 pt-4 pb-2 text-xs uppercase tracking-wide text-slate-500">
+            Per-layer breakdown
+          </div>
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-slate-950 border-b border-slate-800">
               <tr>
@@ -44,7 +73,7 @@ export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patchin
                 <Th>Prec</Th>
                 <Th>Rec</Th>
                 <Th>F1</Th>
-                <Th>Patch</Th>
+                {canPatch && <Th>Patch</Th>}
               </tr>
             </thead>
             <tbody>
@@ -68,24 +97,26 @@ export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patchin
                     <td className="px-3 py-2.5">
                       <F1Bar value={l.f1} />
                     </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex gap-1">
-                        <PatchBtn
-                          label="FN"
-                          color="emerald"
-                          loading={patchingLayer === `${l.layer}-fn`}
-                          onClick={() => handlePatch(l.layer, 'fn')}
-                          title="Push toward resolution (mean_resolved − mean_escalated)"
-                        />
-                        <PatchBtn
-                          label="FP"
-                          color="rose"
-                          loading={patchingLayer === `${l.layer}-fp`}
-                          onClick={() => handlePatch(l.layer, 'fp')}
-                          title="Push toward escalation (inverse)"
-                        />
-                      </div>
-                    </td>
+                    {canPatch && (
+                      <td className="px-3 py-2.5">
+                        <div className="flex gap-1">
+                          <PatchBtn
+                            label="FN"
+                            color="emerald"
+                            loading={patchingLayer === `${l.layer}-fn`}
+                            onClick={() => handlePatch(l.layer, 'fn')}
+                            title="Push toward resolution (mean_resolved − mean_escalated)"
+                          />
+                          <PatchBtn
+                            label="FP"
+                            color="rose"
+                            loading={patchingLayer === `${l.layer}-fp`}
+                            onClick={() => handlePatch(l.layer, 'fp')}
+                            title="Push toward escalation (inverse)"
+                          />
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -97,20 +128,30 @@ export default function ProbeStats({ layers, peakLayer, onBack, onPatch, patchin
   )
 }
 
+function MetricTile({ label, value, accent }) {
+  const tone = accent === 'violet' ? 'text-violet-300' : 'text-slate-100'
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`mt-1 text-lg font-semibold ${tone}`}>{pct(value)}</div>
+    </div>
+  )
+}
+
 function Th({ children }) {
   return <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 uppercase tracking-wide">{children}</th>
 }
 
 function F1Bar({ value }) {
   if (value == null) return <span className="text-slate-600">—</span>
-  const pct = Math.round(value * 100)
-  const color = pct > 70 ? 'bg-emerald-500' : pct > 50 ? 'bg-amber-500' : 'bg-rose-500'
+  const p = Math.round(value * 100)
+  const color = p > 70 ? 'bg-emerald-500' : p > 50 ? 'bg-amber-500' : 'bg-rose-500'
   return (
     <div className="flex items-center gap-1.5">
       <div className="w-10 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${p}%` }} />
       </div>
-      <span className="text-slate-300 w-8">{pct}%</span>
+      <span className="text-slate-300 w-8">{p}%</span>
     </div>
   )
 }
