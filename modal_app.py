@@ -104,6 +104,48 @@ class LLMEndpoint:
         }
 
     @modal.fastapi_endpoint(method="POST")
+    def single_shot(self, payload: dict) -> dict:
+        """
+        Single-shot generation with hidden-state capture at the prompt-final token.
+
+        Used by the insurance-claims injection-probe task. The hidden states are
+        captured on the PROMPT ONLY (pre-generation) so the last-token activation
+        reflects the commitment point right before the verdict is emitted.
+
+        Request:
+            {
+                "system": str,
+                "user": str,
+                "max_new_tokens": int (optional, default 300)
+            }
+
+        Response:
+            {
+                "response": str,
+                "hidden_states": {"0": [...], "1": [...], ...},
+                "prompt_text": str
+            }
+        """
+        system_prompt = payload["system"]
+        user_prompt = payload["user"]
+        max_new_tokens = int(payload.get("max_new_tokens", 300))
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        prompt = self.agent._tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        raw = self.agent._generate_text(prompt, max_new_tokens=max_new_tokens)
+        hidden = self.agent.capture_hidden_states_for_text(prompt)
+        return {
+            "response": raw.strip(),
+            "hidden_states": {str(k): v.tolist() for k, v in hidden.items()},
+            "prompt_text": prompt,
+        }
+
+    @modal.fastapi_endpoint(method="POST")
     def patch_hidden_states(self, payload: dict) -> dict:
         """
         Run a patched forward pass for counterfactual analysis.
