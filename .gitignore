@@ -18,6 +18,9 @@ build/
 # Project-local Conda (if present)
 .conda/
 
+# Claude Code local worktrees (nested repos; do not commit)
+.claude/worktrees/
+
 # Environment / secrets
 .env
 .env.*
