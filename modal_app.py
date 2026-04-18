@@ -39,7 +39,7 @@ app = modal.App("mi-agent-llm", image=image)
     gpu="A10G",
     volumes={str(HF_CACHE_DIR): hf_cache_volume},
     secrets=[hf_secret],
-    min_containers=1,
+    min_containers=4,
 )
 class LLMEndpoint:
     @modal.enter()
